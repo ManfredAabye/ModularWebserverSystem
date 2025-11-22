@@ -1,3 +1,5 @@
+# ⚠️This is a feasibility study and has no practical use yet
+
 # ModularWebserverSystem (MoWe3S) - .NET 8.0
 
 Cross-Platform portables Server-System mit Apache und MariaDB.
@@ -256,3 +258,4 @@ Prüfe Logs in `data/mysql_error.log`
 ### Apache startet nicht
 
 Prüfe Logs in `{platform}/apache/logs/error.log`
+
