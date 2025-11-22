@@ -1,4 +1,4 @@
-# ModularWebserverSystem **.NET 8.0** (MoWeS)
+# ModularWebserverSystem **.NET 8.0** (mow3s)
 
 ## 🚀 **C# Konsolen-App (.NET 8.0) - Cross-Platform**
 

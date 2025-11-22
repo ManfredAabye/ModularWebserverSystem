@@ -1,6 +1,4 @@
-# ⚠️This is a feasibility study and has no practical use yet
-
-# ModularWebserverSystem (MoW₃S) - .NET 8.0
+# ModularWebserverSystem (MoWeS) - .NET 8.0
 
 Cross-Platform portables Server-System mit Apache und MariaDB.
 
@@ -10,6 +8,8 @@ Cross-Platform portables Server-System mit Apache und MariaDB.
 ModularWebserverSystem/
 ├── ModularWebserverSystem.csproj   # .NET 8.0 Projektdatei
 ├── Program.cs                      # Hauptprogramm
+├── ServerConfig.cs                 # Konfigurationsklassen
+├── mow3s.config.json               # Konfigurationsdatei (Ports, Adressen, etc.)
 ├── win-x64/                        # Windows Binaries
 │   ├── mariadb/
 │   │   ├── bin/                    # HIER: mysqld.exe, mysql_install_db.exe einfügen
@@ -143,9 +143,37 @@ chmod +x ModularWebserverSystem
 
 ## Nach dem Start
 
-- **Apache**: <http://localhost:80>
-- **MySQL**: localhost:3306
+- **Apache**: Konfigurierbar via `mow3s.config.json` (Standard: <http://localhost:80>)
+- **MySQL**: Konfigurierbar via `mow3s.config.json` (Standard: localhost:3306)
 - **Stop**: CTRL+C drücken
+
+## Konfiguration
+
+Die `mow3s.config.json` Datei ermöglicht die Anpassung aller wichtigen Einstellungen:
+
+```json
+{
+  "Server": {
+    "MySQL": {
+      "Port": 3306,
+      "BindAddress": "127.0.0.1",
+      "DataDirectory": "data"
+    },
+    "Apache": {
+      "Port": 80,
+      "BindAddress": "0.0.0.0",
+      "DocumentRoot": "www"
+    }
+  },
+  "Database": {
+    "DefaultDatabases": ["testdb"],
+    "CharacterSet": "utf8mb4",
+    "Collation": "utf8mb4_unicode_ci"
+  }
+}
+```
+
+Du kannst die Ports, Bind-Adressen, Verzeichnisse und Datenbanknamen nach Bedarf anpassen.
 
 ## Wichtige Hinweise
 
@@ -172,6 +200,3 @@ chmod +x ModularWebserverSystem
 ## Lizenz
 
 Frei verwendbar für eigene Projekte.
-
-
-
