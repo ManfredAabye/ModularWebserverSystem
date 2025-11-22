@@ -1,380 +1,267 @@
-# ModularWebserverSystem **.NET 8.0** (mow3s)
+# ModularWebserverSystem (MoWe3S)
 
-## 🚀 **C# Konsolen-App (.NET 8.0) - Cross-Platform**
+## Technische Dokumentation
 
-## 1. **Project File (.csproj)**
+### Architektur
 
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
+Das ModularWebserverSystem ist eine .NET 8.0 Konsolenanwendung, die Apache und MariaDB als portable Server-Lösung verwaltet.
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-  </PropertyGroup>
+#### Hauptkomponenten
 
-</Project>
+1. **Program.cs** - Hauptanwendung mit Prozessmanagement
+2. **Mow3sConfig.cs** - Konfigurationsmodell
+3. **mow3s.config.json** - Laufzeitkonfiguration
+
+### Prozessmanagement
+
+```bash
+Start
+  ├─> OS Detection (Windows/Linux/macOS)
+  ├─> Config laden (mow3s.config.json)
+  ├─> MariaDB starten
+  │   ├─> Datenverzeichnis prüfen/erstellen
+  │   ├─> DB initialisieren (falls neu)
+  │   └─> mysqld Prozess starten
+  ├─> Apache starten
+  │   └─> httpd Prozess starten
+  ├─> Monitoring Loop
+  │   └─> Prozesse überwachen
+  └─> Shutdown (CTRL+C)
+      ├─> MariaDB stoppen
+      ├─> Apache stoppen
+      └─> Cleanup
 ```
 
-## 2. **Program.cs (.NET 8.0 Style)**
+### Cross-Platform Support
+
+#### OS Detection
 
 ```csharp
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-
-namespace ModularWebserverSystem;
-
-class Program
-{
-    private static Process? _mysqlProcess;
-    private static Process? _apacheProcess;
-    private static readonly string _basePath = AppContext.BaseDirectory;
-    private static bool _isRunning = true;
-    private static readonly bool _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-    private static readonly bool _isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-    private static readonly bool _isMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
-
-    static async Task Main(string[] args)
-    {
-        Console.Title = "Portable Server";
-        
-        // CTRL+C Handler
-        Console.CancelKeyPress += (sender, e) =>
-        {
-            e.Cancel = true;
-            _isRunning = false;
-        };
-
-        Console.WriteLine("=== Portable Server Starting ===");
-        Console.WriteLine($"Platform: {RuntimeInformation.OSDescription}");
-        Console.WriteLine($"Path: {_basePath}");
-
-        try
-        {
-            await StartServersAsync();
-            
-            Console.WriteLine("\n[OK] Server erfolgreich gestartet!");
-            Console.WriteLine("[DB] MySQL: localhost:3306");
-            Console.WriteLine("[WEB] Apache: http://localhost:80");
-            Console.WriteLine("\nDruecke CTRL+C zum Beenden...");
-
-            // Haupt-Loop
-            while (_isRunning)
-            {
-                await Task.Delay(1000);
-
-                // Pruefen ob Prozesse noch laufen
-                if (_mysqlProcess?.HasExited == true)
-                {
-                    Console.WriteLine("[ERROR] MySQL wurde unerwartet beendet!");
-                    break;
-                }
-
-                if (_apacheProcess?.HasExited == true)
-                {
-                    Console.WriteLine("[ERROR] Apache wurde unerwartet beendet!");
-                    break;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[ERROR] Fehler: {ex.Message}");
-        }
-        finally
-        {
-            await StopServersAsync();
-        }
-    }
-
-    static async Task StartServersAsync()
-    {
-        Console.WriteLine("\nStarting MariaDB...");
-        _mysqlProcess = StartMariaDB();
-        
-        Console.WriteLine("Starting Apache...");
-        _apacheProcess = StartApache();
-        
-        // Warten bis Server hochgefahren sind
-        await Task.Delay(3000);
-    }
-
-    static Process StartMariaDB()
-    {
-        string platformDir = GetPlatformDirectory();
-        string mysqlExe = GetExecutablePath(platformDir, "mariadb", "bin", _isWindows ? "mysqld.exe" : "mysqld");
-        string dataDir = Path.Combine(_basePath, "data");
-        string configFile = Path.Combine(_basePath, platformDir, "mariadb", _isWindows ? "my.ini" : "my.cnf");
-
-        // Datenverzeichnis erstellen falls nicht vorhanden
-        if (!Directory.Exists(dataDir))
-        {
-            Console.WriteLine("Creating data directory...");
-            Directory.CreateDirectory(dataDir);
-        }
-
-        // Pruefen ob Datenbank initialisiert werden muss
-        if (!Directory.Exists(Path.Combine(dataDir, "mysql")))
-        {
-            Console.WriteLine("Initializing database...");
-            InitializeDatabase(platformDir);
-        }
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = mysqlExe,
-            Arguments = $"--defaults-file=\"{configFile}\" --datadir=\"{dataDir}\" --port=3306",
-            UseShellExecute = false,
-            CreateNoWindow = _isWindows,
-            RedirectStandardOutput = !_isWindows,
-            RedirectStandardError = !_isWindows,
-            WorkingDirectory = Path.GetDirectoryName(mysqlExe)
-        };
-
-        var process = Process.Start(startInfo);
-        if (process == null)
-            throw new InvalidOperationException("MySQL konnte nicht gestartet werden");
-        
-        return process;
-    }
-
-    static Process StartApache()
-    {
-        string platformDir = GetPlatformDirectory();
-        string apacheExe = GetExecutablePath(platformDir, "apache", "bin", _isWindows ? "httpd.exe" : "httpd");
-        string configFile = Path.Combine(_basePath, platformDir, "apache", "conf", "httpd.conf");
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = apacheExe,
-            Arguments = $"-f \"{configFile}\"",
-            UseShellExecute = false,
-            CreateNoWindow = _isWindows,
-            RedirectStandardOutput = !_isWindows,
-            RedirectStandardError = !_isWindows,
-            WorkingDirectory = Path.GetDirectoryName(apacheExe)
-        };
-
-        var process = Process.Start(startInfo);
-        if (process == null)
-            throw new InvalidOperationException("Apache konnte nicht gestartet werden");
-        
-        return process;
-    }
-
-    static void InitializeDatabase(string platformDir)
-    {
-        string initExe = GetExecutablePath(platformDir, "mariadb", "bin", 
-            _isWindows ? "mysql_install_db.exe" : "mysql_install_db");
-        string dataDir = Path.Combine(_basePath, "data");
-
-        if (!File.Exists(initExe))
-        {
-            Console.WriteLine("[ERROR] mysql_install_db nicht gefunden!");
-            return;
-        }
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = initExe,
-            Arguments = $"--datadir=\"{dataDir}\"",
-            UseShellExecute = false,
-            CreateNoWindow = _isWindows,
-            WorkingDirectory = Path.GetDirectoryName(initExe)
-        };
-
-        using var process = Process.Start(startInfo);
-        if (process == null) return;
-        
-        process.WaitForExit(30000); // 30 Sekunden Timeout
-        if (!process.HasExited)
-        {
-            process.Kill();
-            Console.WriteLine("[ERROR] Datenbank-Initialisierung timeout!");
-        }
-    }
-
-    static async Task StopServersAsync()
-    {
-        Console.WriteLine("\n[STOP] Stopping servers...");
-        
-        try
-        {
-            var tasks = new List<Task>();
-
-            // MySQL stoppen
-            if (_mysqlProcess is { HasExited: false })
-            {
-                Console.WriteLine("Stopping MySQL...");
-                tasks.Add(KillProcessAsync(_mysqlProcess, "MySQL"));
-            }
-
-            // Apache stoppen
-            if (_apacheProcess is { HasExited: false })
-            {
-                Console.WriteLine("Stopping Apache...");
-                tasks.Add(KillProcessAsync(_apacheProcess, "Apache"));
-            }
-
-            // Auf Beenden warten
-            if (tasks.Count > 0)
-            {
-                await Task.WhenAll(tasks);
-            }
-
-            // Verwaiste Prozesse beenden
-            KillProcessesByName("mysqld");
-            KillProcessesByName("httpd");
-
-            Console.WriteLine("[OK] Server gestoppt.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[ERROR] Fehler beim Stoppen: {ex.Message}");
-        }
-    }
-
-    static async Task KillProcessAsync(Process process, string name)
-    {
-        try
-        {
-            process.Kill();
-            
-            // Korrekte Verwendung von WaitForExitAsync mit CancellationToken
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await process.WaitForExitAsync(cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            Console.WriteLine($"[WARN] {name} Timeout - forciere Beendigung");
-            try { process.Kill(true); } catch { /* Ignorieren */ }
-        }
-        catch
-        {
-            Console.WriteLine($"[ERROR] {name} konnte nicht gestoppt werden!");
-        }
-    }
-
-    static void KillProcessesByName(string processName)
-    {
-        try
-        {
-            foreach (var process in Process.GetProcessesByName(processName))
-            {
-                try
-                {
-                    if (!process.HasExited)
-                    {
-                        process.Kill();
-                        process.WaitForExit(3000);
-                    }
-                }
-                catch
-                {
-                    // Ignorieren falls Prozess nicht beendet werden kann
-                }
-                finally
-                {
-                    process.Dispose();
-                }
-            }
-        }
-        catch
-        {
-            // Ignorieren
-        }
-    }
-
-    static string GetPlatformDirectory()
-    {
-        if (_isWindows) return "win-x64";
-        if (_isLinux) return "linux-x64";
-        if (_isMacOS) return "osx-x64";
-        throw new PlatformNotSupportedException("Nicht unterstuetztes Betriebssystem");
-    }
-
-    static string GetExecutablePath(string platformDir, params string[] pathParts)
-    {
-        var fullPath = Path.Combine(_basePath, platformDir);
-        foreach (var part in pathParts)
-        {
-            fullPath = Path.Combine(fullPath, part);
-        }
-        return fullPath;
-    }
-}
+private static readonly bool _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+private static readonly bool _isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+private static readonly bool _isMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 ```
 
-## 3. **Kompilieren & Publishen**
+#### Plattform-spezifische Pfade
 
 ```bash
-# Für Windows
-dotnet publish -c Release -r win-x64 --self-contained true
-
-# Für Linux (falls benötigt)
-dotnet publish -c Release -r linux-x64 --self-contained true
-
-# Für macOS (falls benötigt)
-dotnet publish -c Release -r osx-x64 --self-contained true
+GetPlatformDirectory()
+  ├─> Windows -> "win-x64"
+  ├─> Linux   -> "linux-x64"
+  └─> macOS   -> "osx-x64"
 ```
 
-## 4. **Verzeichnisstruktur**
+### Konfigurationssystem
+
+#### Hierarchie
 
 ```bash
-ModularWebserverSystem/
-├── ModularWebserverSystem.exe          # .NET 8.0 EXE (Windows)
-├── ModularWebserverSystem              # .NET 8.0 Binary (Linux/macOS)
-│
-├── win-x64/                    # Windows Binaries
-│   ├── mariadb/
-│   │   ├── bin/
-│   │   │   ├── mysqld.exe
-│   │   │   └── mysql_install_db.exe
-│   │   └── my.ini
-│   └── apache/
-│       ├── bin/
-│       │   └── httpd.exe
-│       └── conf/
-│           └── httpd.conf
-│
-├── linux-x64/                  # Linux Binaries
-│   ├── mariadb/
-│   │   ├── bin/
-│   │   │   ├── mysqld
-│   │   │   └── mysql_install_db
-│   │   └── my.cnf
-│   └── apache/
-│       ├── bin/
-│       │   └── httpd
-│       └── conf/
-│           └── httpd.conf
-│
-├── osx-x64/                    # macOS Binaries
-│   ├── mariadb/
-│   │   ├── bin/
-│   │   │   ├── mysqld
-│   │   │   └── mysql_install_db
-│   │   └── my.cnf
-│   └── apache/
-│       ├── bin/
-│       │   └── httpd
-│       └── conf/
-│           └── httpd.conf
-│
-├── data/                       # Wird automatisch erstellt (OS-unabhaengig)
-└── www/                        # Webroot (OS-unabhaengig)
+Mow3sConfig
+  ├─> ServerSettings
+  │   ├─> MySQLServerSettings (Port, BindAddress, DataDirectory)
+  │   └─> ApacheServerSettings (Port, BindAddress, DocumentRoot)
+  ├─> DatabaseSettings (DefaultDatabases, CharacterSet, Collation)
+  ├─> PerformanceSettings
+  │   └─> MySQLPerformanceSettings (MaxConnections, BufferPoolSize)
+  └─> LoggingSettings
+      ├─> MySQLLoggingSettings (ErrorLog)
+      └─> ApacheLoggingSettings (ErrorLog, AccessLog)
 ```
 
-**Diese Version:**
+#### Laden der Konfiguration
 
-- [OK] **.NET 8.0** - Modern & Cross-Platform
-- [OK] **Win10/11 + Linux/macOS** kompatibel mit OS-Detection
-- [OK] **Async/Await** - Moderne Pattern mit korrektem CancellationToken
-- [OK] **Nullable Reference Types** - Type Safety
-- [OK] **Single File Deployment** möglich
-- [OK] **Plattform-spezifische Binaries** - Automatische Auswahl basierend auf OS
-- [OK] **Keine Emojis** - Nur ASCII-Output für bessere Kompatibilität
+```csharp
+LoadConfiguration()
+  ├─> Datei existiert?
+  │   ├─> Ja: JSON deserialisieren
+  │   └─> Nein: Standardwerte verwenden
+  └─> Fehlerbehandlung mit Fallback
+```
+
+### Prozess-Lifecycle
+
+#### Start
+
+```csharp
+StartMariaDB()
+  1. Platform-Verzeichnis ermitteln
+  2. Executable-Pfad konstruieren
+  3. Config-Datei lokalisieren (my.ini/my.cnf)
+  4. Datenverzeichnis prüfen
+  5. DB initialisieren falls nötig
+  6. Prozess mit Argumenten starten
+  7. Prozess-Handle zurückgeben
+```
+
+#### Stop
+
+```csharp
+StopServersAsync()
+  1. Beide Prozesse parallel stoppen
+  2. Graceful Shutdown mit Timeout (5s)
+  3. Force Kill bei Timeout
+  4. Verwaiste Prozesse aufräumen
+  5. Ressourcen freigeben
+```
+
+### Async/Await Pattern
+
+Alle I/O-Operationen sind asynchron:
+
+- `Task Main()`
+- `Task StartServersAsync()`
+- `Task StopServersAsync()`
+- `Task KillProcessAsync()`
+- `WaitForExitAsync()` mit CancellationToken
+
+### Fehlerbehandlung
+
+#### Strategien
+
+1. **Try-Catch** um kritische Bereiche
+2. **Fallback-Werte** bei Config-Fehlern
+3. **Prozess-Monitoring** mit Restart-Erkennung
+4. **Graceful Degradation** statt harter Abbrüche
+
+#### Logging
+
+```bash
+[OK]      - Erfolgreiche Operation
+[ERROR]   - Kritischer Fehler
+[WARN]    - Warnung
+[INFO]    - Information
+[CONFIG]  - Konfiguration geladen
+[DELETE]  - Datei/Verzeichnis gelöscht
+[STOP]    - Server wird gestoppt
+```
+
+### Build-System
+
+#### Project File Features
+
+```xml
+<PublishSingleFile>true</PublishSingleFile>        <!-- Eine einzige EXE -->
+<SelfContained>true</SelfContained>                <!-- Kein .NET Runtime nötig -->
+<IncludeNativeLibrariesForSelfExtract>true</>      <!-- Native Libs einbetten -->
+```
+
+#### PreBuild Target
+
+Prüft vor jedem Build ob `mow3s.config.json` existiert.
+
+### Helper-Scripts
+
+#### setup-project.ps1 / .sh
+
+- Erstellt .csproj falls nicht vorhanden
+- Konfiguriert Projekt-Einstellungen
+- Restored NuGet-Pakete
+
+#### download-binaries-windows.ps1
+
+- Lädt MariaDB 12.0 herunter
+- Lädt Apache 2.4.65 herunter
+- Entpackt und kopiert Binaries
+- Validiert kritische Dateien
+
+#### download-binaries-linux.sh
+
+- Installiert via Paketmanager (apt/yum/dnf)
+- Kopiert Binaries aus System-Verzeichnissen
+- Unterstützt Debian, RHEL, Fedora
+
+#### clean.bat / .sh
+
+- Löscht bin/, obj/, publish/
+- Entfernt .sln, .bak, .csproj.user
+- Bereitet für Clean-Build vor
+
+### Git-Integration
+
+#### .gitattributes
+
+```bash
+*.sh         -> LF (Linux/macOS)
+*.bat *.ps1  -> CRLF (Windows)
+*.json *.md  -> LF (plattformunabhängig)
+Binaries     -> binary (keine Konvertierung)
+```
+
+#### .gitkeep
+
+Leere Dateien in Binary-Verzeichnissen damit Git die Struktur erhält.
+
+### Sicherheitsaspekte
+
+1. **Bind-Address**: Standard auf 127.0.0.1 (nur localhost)
+2. **Port-Konfiguration**: Anpassbar für non-privileged Ports
+3. **Prozess-Isolation**: Separate Prozesse für DB und Webserver
+4. **Kein Root**: Sollte nicht als root/admin laufen (außer bei Port 80)
+
+### Performance-Überlegungen
+
+1. **Async I/O**: Keine blockierenden Operationen
+2. **Paralleles Shutdown**: Beide Server gleichzeitig stoppen
+3. **Buffer Pool**: Konfigurierbar via mow3s.config.json
+4. **Max Connections**: Begrenzt um Ressourcen zu schonen
+
+### Deployment-Optionen
+
+#### Single-File
+
+```bash
+dotnet publish -p:PublishSingleFile=true
+```
+
+Resultat: Eine einzelne EXE + Config
+
+#### Framework-Dependent
+
+```bash
+dotnet publish --self-contained false
+```
+
+Kleinere Dateigröße, benötigt .NET Runtime
+
+#### Self-Contained (empfohlen)
+
+```bash
+dotnet publish --self-contained true
+```
+
+Keine Runtime-Abhängigkeit, größere Dateigröße
+
+### Erweiterungsmöglichkeiten
+
+1. **Weitere Server**: PHP-FPM, nginx, PostgreSQL
+2. **Service-Integration**: systemd, Windows Service
+3. **Web-UI**: Management-Interface
+4. **Auto-Update**: Für Binaries
+5. **Backup-System**: Automatische DB-Backups
+6. **SSL/TLS**: Zertifikat-Management
+
+### Best Practices
+
+1. **Versionskontrolle**: Git-Workflow verwenden
+2. **Config-Management**: mow3s.config.json nicht committen wenn sensitive Daten
+3. **Binary-Verwaltung**: Download-Scripts verwenden
+4. **Clean Builds**: Regelmäßig clean.sh/bat ausführen
+5. **Testing**: Auf allen Zielplattformen testen
+
+### Bekannte Limitierungen
+
+1. **Windows-only Binaries**: Apache/MariaDB müssen für jedes OS separat besorgt werden
+2. **Port 80**: Benötigt Admin-Rechte auf Windows, root auf Linux/macOS
+3. **Single-Instance**: Kein Multi-Instancing Support
+4. **No Hot-Reload**: Config-Änderungen erfordern Neustart
+
+### Versionsinformationen
+
+- **.NET**: 8.0
+- **MariaDB**: 12.0.0 (konfigurierbar)
+- **Apache**: 2.4.65 (konfigurierbar)
+- **Plattformen**: Windows 10/11, Linux (Debian/RHEL), macOS 12+
+
+### Lizenz & Copyright
+
+Frei verwendbar. Keine Garantie. Auf eigene Gefahr nutzen.

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace ModularWebserverSystem;
 
@@ -12,10 +13,14 @@ class Program
     private static readonly bool _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
     private static readonly bool _isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
     private static readonly bool _isMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+    private static Mow3sConfig _config = new();
 
     static async Task Main(string[] args)
     {
         Console.Title = "Portable Server";
+        
+        // Lade Konfiguration
+        _config = LoadConfiguration();
         
         // CTRL+C Handler
         Console.CancelKeyPress += (sender, e) =>
@@ -27,14 +32,16 @@ class Program
         Console.WriteLine("=== Portable Server Starting ===");
         Console.WriteLine($"Platform: {RuntimeInformation.OSDescription}");
         Console.WriteLine($"Path: {_basePath}");
+        Console.WriteLine($"MySQL Port: {_config.Server.MySQL.Port}");
+        Console.WriteLine($"Apache Port: {_config.Server.Apache.Port}");
 
         try
         {
             await StartServersAsync();
             
             Console.WriteLine("\n[OK] Server erfolgreich gestartet!");
-            Console.WriteLine("[DB] MySQL: localhost:3306");
-            Console.WriteLine("[WEB] Apache: http://localhost:80");
+            Console.WriteLine($"[DB] MySQL: {_config.Server.MySQL.BindAddress}:{_config.Server.MySQL.Port}");
+            Console.WriteLine($"[WEB] Apache: http://{_config.Server.Apache.BindAddress}:{_config.Server.Apache.Port}");
             Console.WriteLine("\nDruecke CTRL+C zum Beenden...");
 
             // Haupt-Loop
@@ -82,7 +89,7 @@ class Program
     {
         string platformDir = GetPlatformDirectory();
         string mysqlExe = GetExecutablePath(platformDir, "mariadb", "bin", _isWindows ? "mysqld.exe" : "mysqld");
-        string dataDir = Path.Combine(_basePath, "data");
+        string dataDir = Path.Combine(_basePath, _config.Server.MySQL.DataDirectory);
         string configFile = Path.Combine(_basePath, platformDir, "mariadb", _isWindows ? "my.ini" : "my.cnf");
 
         // Datenverzeichnis erstellen falls nicht vorhanden
@@ -102,7 +109,7 @@ class Program
         var startInfo = new ProcessStartInfo
         {
             FileName = mysqlExe,
-            Arguments = $"--defaults-file=\"{configFile}\" --datadir=\"{dataDir}\" --port=3306",
+            Arguments = $"--defaults-file=\"{configFile}\" --datadir=\"{dataDir}\" --port={_config.Server.MySQL.Port} --bind-address={_config.Server.MySQL.BindAddress}",
             UseShellExecute = false,
             CreateNoWindow = _isWindows,
             RedirectStandardOutput = !_isWindows,
@@ -145,7 +152,7 @@ class Program
     {
         string initExe = GetExecutablePath(platformDir, "mariadb", "bin", 
             _isWindows ? "mysql_install_db.exe" : "mysql_install_db");
-        string dataDir = Path.Combine(_basePath, "data");
+        string dataDir = Path.Combine(_basePath, _config.Server.MySQL.DataDirectory);
 
         if (!File.Exists(initExe))
         {
@@ -280,5 +287,40 @@ class Program
             fullPath = Path.Combine(fullPath, part);
         }
         return fullPath;
+    }
+
+    static Mow3sConfig LoadConfiguration()
+    {
+        string configPath = Path.Combine(_basePath, "mow3s.config.json");
+        
+        try
+        {
+            if (File.Exists(configPath))
+            {
+                string jsonContent = File.ReadAllText(configPath);
+                var config = JsonSerializer.Deserialize<Mow3sConfig>(jsonContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    ReadCommentHandling = JsonCommentHandling.Skip
+                });
+                
+                if (config != null)
+                {
+                    Console.WriteLine("[CONFIG] mow3s.config.json geladen");
+                    return config;
+                }
+            }
+            else
+            {
+                Console.WriteLine("[WARN] mow3s.config.json nicht gefunden, verwende Standardwerte");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Fehler beim Laden der Konfiguration: {ex.Message}");
+            Console.WriteLine("[INFO] Verwende Standardwerte");
+        }
+        
+        return new Mow3sConfig();
     }
 }
