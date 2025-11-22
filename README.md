@@ -1,6 +1,6 @@
 # ⚠️This is a feasibility study and has no practical use yet
 
-# ModularWebserverSystem (MoWeS) - .NET 8.0
+# ModularWebserverSystem (MoW3S) - .NET 8.0
 
 Cross-Platform portables Server-System mit Apache und MariaDB.
 
@@ -172,4 +172,5 @@ chmod +x ModularWebserverSystem
 ## Lizenz
 
 Frei verwendbar für eigene Projekte.
+
 
