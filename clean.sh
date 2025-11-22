@@ -25,30 +25,38 @@ fi
 
 # Lösche .sln Dateien
 echo "[DELETE] Lösche .sln Dateien..."
-if ls ./*.sln 1> /dev/null 2>&1; then
-    rm -f ./*.sln
-    echo "[OK] .sln Dateien gelöscht"
+shopt -s nullglob
+sln_files=(*.sln)
+if [ ${#sln_files[@]} -gt 0 ]; then
+    rm -f -- *.sln
+    echo "[OK] ${#sln_files[@]} .sln Dateien gelöscht"
 else
     echo "[INFO] Keine .sln Dateien gefunden"
 fi
+shopt -u nullglob
 
 # Lösche .bak Dateien
 echo "[DELETE] Lösche .bak Dateien..."
-if ls ./*.bak 1> /dev/null 2>&1; then
-    rm -f ./*.bak
-    echo "[OK] .bak Dateien gelöscht"
+shopt -s nullglob
+bak_files=(*.bak)
+if [ ${#bak_files[@]} -gt 0 ]; then
+    rm -f -- *.bak
+    echo "[OK] ${#bak_files[@]} .bak Dateien gelöscht"
 else
     echo "[INFO] Keine .bak Dateien gefunden"
 fi
-
+shopt -u nullglob
 # Lösche .csproj.user Dateien
 echo "[DELETE] Lösche .csproj.user Dateien..."
-if ls ./*.csproj.user 1> /dev/null 2>&1; then
-    rm -f ./*.csproj.user
-    echo "[OK] .csproj.user Dateien gelöscht"
+shopt -s nullglob
+user_files=(*.csproj.user)
+if [ ${#user_files[@]} -gt 0 ]; then
+    rm -f -- *.csproj.user
+    echo "[OK] ${#user_files[@]} .csproj.user Dateien gelöscht"
 else
     echo "[INFO] Keine .csproj.user Dateien gefunden"
 fi
+shopt -u nullglob
 
 # Lösche publish-Verzeichnisse
 if [ -d "publish" ]; then
